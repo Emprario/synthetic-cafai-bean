@@ -15,7 +15,7 @@ Dataset : [www.kaggle.com](https://www.kaggle.com/datasets/uom190346a/global-cof
 ### Input variables 
 * Age
 * Gender
-* Country ***(to confirm)***
+* Country
 * Coffee_intake
 * Caffeine_mg
 * Sleep_hours
