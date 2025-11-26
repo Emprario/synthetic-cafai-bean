@@ -237,8 +237,8 @@ y_test = le.transform(y_test)
 # We have to normalize :
 
 normalize = MinMaxScaler()
-x_train_norm = normalize.fit_transform(x_train)
-x_test_norm = normalize.transform(x_test)
+x_train = normalize.fit_transform(x_train)
+x_test = normalize.transform(x_test)
 
 # pd.DataFrame(x_train_norm).to_csv("norm.csv")
 # %% [markdown]
