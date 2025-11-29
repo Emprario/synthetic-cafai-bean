@@ -90,6 +90,12 @@ sch_db.isnull().sum()
 # Let's assume rows without data in 'Health Issues' represent a person with good health
 sch_db['Health_Issues'].fillna('No', inplace=True)
 print(sch_db['Health_Issues'].unique())
+# We have a problem with "severe" since it has too few data to be used properly (i have tried way to much but we can't)
+# A solution i found to solve this problem is mixing "moderate" and "severe" into one single value "high risk"
+sch_db['Health_Issues'] = sch_db['Health_Issues'].replace({
+    'Severe': 'HighRisk',
+    'Moderate': 'HighRisk'
+})
 
 
 # %%
@@ -111,7 +117,7 @@ def show_plots():
 # Delete the "other" gender since non-sense
 sch_db = sch_db[sch_db['Gender'] != 'Other']
 # Severe is deleting it is too "niche"
-sch_db = sch_db[sch_db['Health_Issues'] != 'Severe']
+#sch_db = sch_db[sch_db['Health_Issues'] != 'Severe']
 
 # %%
 # Here, the 'ID' column is irrelevant for the ML algorithm, so we can just drop it
