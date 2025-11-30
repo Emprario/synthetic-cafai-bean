@@ -29,7 +29,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
 
-from imblearn.over_sampling import SMOTEN
+from imblearn.over_sampling import SMOTE
 
 
 warnings.filterwarnings("ignore")
@@ -262,7 +262,7 @@ y_test = le.transform(y_test)
 # %% [markdown]
 # ### Oversampling
 #%%
-"""smote = SMOTEN(random_state=20)
+smote = SMOTE(random_state=20)
 x_train, y_train = smote.fit_resample(x_train, y_train)
 
 # Convert np array into panda series
@@ -274,7 +274,7 @@ print(y_test.value_counts())
 print()
 print("\n################")
 print(y_train.value_counts())
-print()"""
+print()
 
 # %% [markdown]
 # ## Random Forest
