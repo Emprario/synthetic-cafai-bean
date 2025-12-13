@@ -104,6 +104,7 @@ def show_plots():
     # One way we can extend this plot is adding a layer of individual points on top of it through Seaborn's striplot
     # We'll use jitter=True so that all the points don't fall in single vertical lines above the species
     # Saving the resulting axes as ax each time causes the resulting plot to be shown on top of the previous axes
+    return
     for col in sch_db:
         ax = sns.boxplot(x='Health_Issues', y=str(col), data=sch_db)
         ax = sns.stripplot(x='Health_Issues', y=str(col), data=sch_db, jitter=True, edgecolor="gray")
@@ -281,8 +282,7 @@ print()
 # %%
 
 # We first have to build the model :
-random_forest_classifier = RandomForestClassifier() # we can put random_state=(number) to freeze the randomizer but i don't care
-
+random_forest_classifier = RandomForestClassifier(n_jobs=-1, random_state=RD_STATE)
 # Let's find the best hyperparameters
 hyperparameters = {
     "n_estimators":[100, 200],
