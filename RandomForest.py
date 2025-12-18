@@ -26,10 +26,18 @@ from sklearn.preprocessing import LabelEncoder
 import warnings
 
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
+from sklearn.model_selection import GridSearchCV, RepeatedKFold, cross_validate, RandomizedSearchCV
+from sklearn.metrics import make_scorer, classification_report, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score, RocCurveDisplay
+
+from sklearn.model_selection import ValidationCurveDisplay, LearningCurveDisplay
 
 from imblearn.over_sampling import SMOTE
+
+from sklearn.metrics import roc_curve, roc_auc_score
+
+from sklearn.base import clone
+
+from sklearn.preprocessing import LabelBinarizer
 
 
 warnings.filterwarnings("ignore")
@@ -124,6 +132,15 @@ sch_db = sch_db[sch_db['Gender'] != 'Other']
 # Here, the 'ID' column is irrelevant for the ML algorithm, so we can just drop it
 sch_db = sch_db.drop(["ID"], axis=1)
 
+# Try to standardize without Physical_Activity_Hours and Occupation
+#sch_db = sch_db.drop(["Physical_Activity_Hours"], axis=1)
+#sch_db = sch_db.drop(["Occupation"], axis=1)
+sch_db = sch_db.drop(["Country"], axis=1)
+
+# Handle every 1 as outliers worth to delete!
+sch_db = sch_db.drop(["Smoking"], axis=1)
+
+
 sch_db
 
 # %% [markdown]
@@ -175,6 +192,9 @@ show_plots()
 # Target value for the classification model
 x = sch_db.drop('Health_Issues', axis=1)
 y = sch_db['Health_Issues']
+
+print(x.columns)
+
 # Since our database is small (< 10k lines), we keep 20% of the data for testing purpose
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.20, random_state=RD_STATE)
 
@@ -215,20 +235,35 @@ def all_to_csv(x_train, x_test, y_train, y_test):
 
 ### ENCODE X ###
 
-ohe_x = OneHotEncoder()
-cols = ["Gender", "Country", "Sleep_Quality", "Stress_Level", "Occupation"]
 
+cols = ["Gender", "Sleep_Quality", "Stress_Level", "Occupation"] # Country
 
-def transformationEncoder(df: pd.DataFrame, colName: str) -> pd.DataFrame:
-    onehot_train = ohe_x.fit_transform(df[[colName]])
+def transformationEncoder(df_train, df_test, colName: str) -> pd.DataFrame:
+    ohe_x = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
+    ohe_x.fit(df_train[[colName]])
     column_names = [colName + "_" + str(cat) for cat in ohe_x.categories_[0]]
-    dfOneHot = pd.DataFrame(onehot_train.toarray(), columns=column_names, index=df.index)
-    return pd.concat([df.drop(colName, axis=1), dfOneHot], axis=1)
 
+    #onehot_train = ohe_x.fit_transform(df[[colName]])
+    #column_names = [colName + "_" + str(cat) for cat in ohe_x.categories_[0]]
+    #dfOneHot = pd.DataFrame(onehot_train.toarray(), columns=column_names, index=df.index)
+    #return pd.concat([df.drop(colName, axis=1), dfOneHot], axis=1)
+    
+    # Transform training data
+    onehot_train = ohe_x.transform(df_train[[colName]])
+    df_train_onehot = pd.DataFrame(onehot_train, columns=column_names, index=df_train.index)
+    df_train = pd.concat([df_train.drop(colName, axis=1), df_train_onehot], axis=1)
 
+    # Transform test data
+    onehot_test = ohe_x.transform(df_test[[colName]])
+    df_test_onehot = pd.DataFrame(onehot_test, columns=column_names, index=df_test.index)
+    df_test = pd.concat([df_test.drop(colName, axis=1), df_test_onehot], axis=1)
+    
+    return df_train, df_test
+
+# Apply label encoding to each column
 for col in cols:
-    x_train = transformationEncoder(x_train, col)
-    x_test = transformationEncoder(x_test, col)
+    x_train, x_test = transformationEncoder(x_train, x_test, col)
+
 
 # %%
 
@@ -261,9 +296,25 @@ y_test = le.transform(y_test)
 # pd.DataFrame(x_train_norm).to_csv("norm.csv")
 
 # %% [markdown]
+# ## RF UNDERFIT
+
+# %%
+
+# Remove 90% of the training records (keep only 75%)
+#subset_fraction = 0.5
+#subset_indices = np.random.choice(len(x_train), size=int(subset_fraction * len(x_train)), replace=False)
+
+# Subset the data
+#x_train_subset = x_train.iloc[subset_indices] if hasattr(x_train, 'iloc') else x_train[subset_indices]
+#y_train_subset = y_train.iloc[subset_indices] if hasattr(y_train, 'iloc') else y_train[subset_indices]
+
+#x_train = x_train_subset
+#y_train = y_train_subset
+
+# %% [markdown]
 # ### Oversampling
 #%%
-smote = SMOTE(random_state=20)
+smote = SMOTE(random_state=RD_STATE)
 x_train, y_train = smote.fit_resample(x_train, y_train)
 
 # Convert np array into panda series
@@ -284,24 +335,61 @@ print()
 # We first have to build the model :
 random_forest_classifier = RandomForestClassifier(n_jobs=-1, random_state=RD_STATE)
 # Let's find the best hyperparameters
-hyperparameters = {
-    "n_estimators":[100, 200],
-    "max_depth":[None, 10, 20],
-    "min_samples_split":[2, 5],
-    "min_samples_leaf":[1, 2],
-    "max_features":["sqrt", "log2"],
+#hyperparameters = {
+#    "n_estimators":[100, 200],
+#    "max_depth":[None, 10, 20],
+#    "min_samples_split":[2, 5, 10],
+#    "min_samples_leaf":[1, 2, 4],
+#    "max_features":["sqrt", "log2"],
+#}
+from scipy.stats import randint
+
+# Define the search space
+param_distributions = {
+    'n_estimators': randint(100, 500),         # Random integer between 100 and 500
+    'max_depth': [i for i in range(1,11)],     # Discrete list
+    'min_samples_split': randint(2, 11),       # Random integer between 2 and 10
+    'min_samples_leaf': randint(1, 5),         # Random integer between 1 and 4
+    'max_features': ['sqrt'],                  # Categorical
 }
 
-search = GridSearchCV(random_forest_classifier, hyperparameters, cv=5, scoring='accuracy')
-search.fit(x_train, y_train)
-print(f"Best parameters: {search.best_params_}")
-print(f"Best Score: {search.best_score_}")
+#search = GridSearchCV(random_forest_classifier, hyperparameters, cv=5, scoring='accuracy')
+# Initialize RandomizedSearchCV
+# n_iter=50 means it will try 50 random combinations
+search = RandomizedSearchCV(
+    estimator=random_forest_classifier,
+    param_distributions=param_distributions,
+    n_iter=50, 
+    cv=3, 
+    scoring='recall_macro', 
+    verbose=1, 
+    random_state=RD_STATE,
+    n_jobs=-1
+)
 
-best_rf_classifier = search.best_estimator_
+if False:
+    search.fit(x_train, y_train)
+    print(f"Best parameters: {search.best_params_}")
+    print(f"Best Score: {search.best_score_}")
 
+
+    # The best parameters found by GridSearchCV
+    # 'max_depth': None, 'max_features': 'sqrt', 'min_samples_leaf': 1, 'min_samples_split': 2, 'n_estimators': 100
+    # The best parameters found by RandomSearchCV
+    # {'max_depth': 6, 'max_features': 'sqrt', 'min_samples_leaf': 4, 'min_samples_split': 8, 'n_estimators': 225}
+
+
+    best_rf_classifier = search.best_estimator_
+else:
+    best_rf_classifier = RandomForestClassifier(n_jobs=-1, random_state=RD_STATE, **{'max_depth': 3, 'max_features': 'sqrt', 'min_samples_leaf': 4, 'min_samples_split': 8, 'n_estimators': 225})
+
+
+#%%
+best_rf_classifier.fit(x_train, y_train)
 y_predict = best_rf_classifier.predict(x_test)
-
 print(y_predict)
+
+
 # %% [markdown]
 # ## Evaluation of the model
 # %%
@@ -309,7 +397,7 @@ print(y_predict)
 # Get the accuracy score
 knn_acc = accuracy_score(y_test, y_predict)*100
 knn_pre = precision_score(y_test, y_predict, average = 'weighted')
-knn_recall = recall_score(y_test, y_predict, average = 'weighted')
+knn_recall = recall_score(y_test, y_predict, average = 'macro')
 knn_f1_ = f1_score(y_test, y_predict, average = 'weighted')
 
 print("\nRF - Accuracy: {:.3f}".format(knn_acc))
@@ -320,4 +408,69 @@ print ('\n Classification Report:\n', classification_report(y_test, y_predict))
 print('\n Confusion Matrix:\n', confusion_matrix(y_test, y_predict))
 print()
 
+#%%
 
+ValidationCurveDisplay.from_estimator(
+   best_rf_classifier, x_train, y_train, param_name="max_depth", param_range=[i for i in range(1, 10)], n_jobs=-1,
+   scoring="accuracy", cv=5
+)
+
+plt.title('Validation Curve for RandomForest (max_depth)')
+plt.grid(True)
+plt.show()
+
+LearningCurveDisplay.from_estimator(
+   best_rf_classifier, x_train, y_train, train_sizes=np.linspace(0.1, 1.0, 10), cv=5, n_jobs=-1,
+   scoring="accuracy"
+)
+
+plt.title('Learning Curve for RandomForest')
+plt.grid(True)
+plt.show()
+
+#%%
+
+# Binarize labels (required for multiclass ROC)
+lb = LabelBinarizer().fit(y_train)
+y_onehot_test = lb.transform(y_test)
+y_score_rf = best_rf_classifier.predict_proba(x_test)
+
+fig, ax = plt.subplots()
+
+for i, class_name in enumerate(lb.classes_):
+    RocCurveDisplay.from_predictions(
+        y_onehot_test[:, i],
+        y_score_rf[:, i],
+        name=f"ROC curve for {class_name}",
+        ax=ax,
+    )
+
+plt.plot([0, 1], [0, 1], "k--", label="Random algorithm (AUC = 0.5)")
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.title("Random Forest Multi-class ROC (One-vs-Rest)")
+plt.grid(True)
+plt.legend()
+plt.show()
+#%%
+exit()
+print()
+
+# Stratifies KFold is impossible in multilabel prediction
+rkf = RepeatedKFold(n_splits=5, n_repeats=10, random_state=RD_STATE)
+
+# Define scorers with zero_division=0
+scoring = {
+    'accuracy': 'accuracy',
+    'precision': make_scorer(precision_score, average='weighted'),
+    'recall': make_scorer(recall_score, average='weighted'),
+    'f1': make_scorer(f1_score, average='weighted')
+}
+
+cv_results = cross_validate(best_rf_classifier, x_train, y_train, cv=rkf, scoring=scoring)
+
+
+for score in cv_results:
+    print(f"KNN (RepeatedKFold) - {score}: {np.mean(cv_results[score]):.3f}")
+    
+# %%
