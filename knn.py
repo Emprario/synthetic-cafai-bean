@@ -12,28 +12,26 @@ import kagglehub
 import pandas as pd
 import numpy as np
 
-# DataViz
+# Data visualisation
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-# Prerpoc
+# Preprocessing
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder
-from sklearn.preprocessing import LabelEncoder
 
 # Feature scaling
-from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import StandardScaler
 
-import warnings
-
+# Model + evaluation
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import GridSearchCV, RepeatedKFold, cross_validate
 from sklearn.metrics import make_scorer, multilabel_confusion_matrix, classification_report, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
-
 from sklearn.multioutput import MultiOutputClassifier
 from sklearn.metrics import roc_curve, roc_auc_score
 
+import warnings
+import math
 
 warnings.filterwarnings("ignore")
 
@@ -65,6 +63,160 @@ for col in sch_db.columns:
 # Check dataset
 sch_db.dtypes
 
+# %%
+# Check distribution
+numerical_cols = sch_db.select_dtypes(include=['int64', 'float64']).columns
+
+def plot_numeric_distributions(df, cols):
+    n = len(cols)
+    rows = int(np.ceil(n / 3))
+    palette = sns.color_palette("viridis", n)
+    plt.figure(figsize=(20, rows * 4))
+    for i, col in enumerate(cols, 1):
+        plt.subplot(rows, 3, i)
+        sns.histplot(df[col], kde=True, bins=30, color=palette[i-1])
+        plt.title(f"Distribution of {col}", fontsize=12, fontweight='bold')
+        plt.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+plot_numeric_distributions(sch_db, numerical_cols)
+
+# %%
+# Check percentage
+plt.figure(figsize=(22, 18))
+
+categorical_cols = sch_db.select_dtypes(include=['object', 'category']).columns
+for i, col in enumerate(categorical_cols, 1):
+    plt.subplot(4, 4, i)
+    sch_db[col].value_counts().plot.pie(
+        autopct='%1.1f%%',
+        startangle=90,
+        pctdistance=0.85,
+        textprops={'fontsize': 10},
+        wedgeprops={"linewidth": 1, "edgecolor": "white"},
+        cmap="tab20"
+    )
+    centre_circle = plt.Circle((0,0),0.50,color='white', fc='white')
+    plt.gca().add_artist(centre_circle)
+    plt.title(f"{col}", fontsize=12, fontweight='bold')
+    plt.ylabel("")
+
+plt.tight_layout()
+plt.show()
+
+# %%
+def plot_histograms_by_target(df, target='Health_Issues', exclude_cols=None, bins=30, cols_per_row=3, palette='Dark2'):
+    sns.set(style="whitegrid")
+    # Missing target values were temporarily imputed for visualization purposes only during EDA.
+    df[target].fillna('No', inplace=True)
+    if exclude_cols is None:
+        exclude_cols = []
+    num_cols = [
+        col for col in df.select_dtypes(include='number').columns
+        if col not in exclude_cols + [target]
+    ]
+    n = len(num_cols)
+    nrows = math.ceil(n / cols_per_row)
+    fig, axes = plt.subplots(
+        nrows,
+        cols_per_row,
+        figsize=(6.5 * cols_per_row, 4.8 * nrows)
+    )
+    axes = axes.flatten()
+    unique_classes = sorted(df[target].unique())
+    colors = sns.color_palette(palette, len(unique_classes))
+    for i, col in enumerate(num_cols):
+        ax = axes[i]
+        for cls, color in zip(unique_classes, colors):
+            subset = df[df[target] == cls][col]
+            sns.kdeplot(
+                subset,
+                ax=ax,
+                color=color,
+                linewidth=2.5,
+                label=str(cls),
+                alpha=0.9
+            )
+            sns.histplot(
+                subset,
+                ax=ax,
+                bins=bins,
+                color=color,
+                stat="density",
+                alpha=0.25
+            )
+        ax.set_title(
+            f"{col} vs {target}",
+            fontsize=14,
+            fontweight='bold'
+        )
+        ax.legend(
+            title=target,
+            fontsize=10,
+            title_fontsize=11,
+            frameon=True,
+            facecolor="white",
+            edgecolor="black"
+        )
+        ax.grid(alpha=0.25)
+    for j in range(i + 1, len(axes)):
+        axes[j].remove()
+    plt.tight_layout()
+    plt.show()
+
+plot_histograms_by_target(sch_db, target='Health_Issues')
+
+# %%
+def show_plots(df, target='Health_Issues', cols_per_row=3, exclude_cols=None):
+    if exclude_cols is None:
+        exclude_cols = []
+
+    cols = [col for col in df.columns if col not in exclude_cols + [target]]
+
+    n = len(cols)
+    nrows = math.ceil(n / cols_per_row)
+
+    fig, axes = plt.subplots(
+        nrows=nrows,
+        ncols=cols_per_row,
+        figsize=(6 * cols_per_row, 4.5 * nrows)
+    )
+
+    axes = axes.flatten()
+
+    for i, col in enumerate(cols):
+        ax = axes[i]
+
+        sns.boxplot(
+            x=target,
+            y=col,
+            data=df,
+            ax=ax,
+            showfliers=False
+        )
+
+        sns.stripplot(
+            x=target,
+            y=col,
+            data=df,
+            ax=ax,
+            jitter=True,
+            color="black",
+            alpha=0.4
+        )
+
+        ax.set_title(f"{col} vs {target}")
+        ax.grid(alpha=0.3)
+
+    # Supprimer les axes vides
+    for j in range(i + 1, len(axes)):
+        axes[j].remove()
+
+    plt.tight_layout()
+    plt.show()
+
+show_plots(sch_db, target='Health_Issues')
+
 # %% [markdown]
 # ## **Data Cleaning**
 # * Goal: Fix or remove incorrect, corrupted, or incomplete data.
@@ -78,7 +230,7 @@ sch_db.dtypes
 #     * Correcting inconsistencies (e.g., "USA" vs. "United States") and incomplete values
 #         + Done (none)
 #     * Handling outliers (depending on the use case)
-#         + detect_outliers_iqr
+#         + Done (removed outliers with IQR method)
 #
 
 # %% [markdown]
@@ -94,20 +246,12 @@ sch_db.isnull().sum()
 sch_db['Health_Issues'].fillna('No', inplace=True)
 print(sch_db['Health_Issues'].unique())
 
-
-# %%
-
-def show_plots():
-    if not INTERRACTIVE:
-      return
-    # One way we can extend this plot is adding a layer of individual points on top of it through Seaborn's striplot
-    # We'll use jitter=True so that all the points don't fall in single vertical lines above the species
-    # Saving the resulting axes as ax each time causes the resulting plot to be shown on top of the previous axes
-    for col in sch_db:
-        ax = sns.boxplot(x='Health_Issues', y=str(col), data=sch_db)
-        ax = sns.stripplot(x='Health_Issues', y=str(col), data=sch_db, jitter=True, edgecolor="gray")
-        plt.show()
-
+# We have a problem with "severe" since it has too few data to be used properly
+# We decided to mix "moderate" and "severe" into one single value "high risk".
+sch_db['Health_Issues'] = sch_db['Health_Issues'].replace({
+    'Severe': 'HighRisk',
+    'Moderate': 'HighRisk'
+})
 
 # %% [markdown]
 # #### 2. Removing duplicates and irrelevant variables
@@ -115,8 +259,6 @@ def show_plots():
 # %%
 # Delete the "other" gender since non-sense
 sch_db = sch_db[sch_db['Gender'] != 'Other']
-# Severe is deleting it is too "niche"
-sch_db = sch_db[sch_db['Health_Issues'] != 'Severe']
 
 # %%
 # Here, the 'ID' column is irrelevant for the ML algorithm, so we can just drop it
@@ -144,12 +286,8 @@ for col in sch_db.columns:
     print(sch_db[col].describe())
     print("\n")
 
-
-# high Physical_Activity_Hours !
-
 # It seems there are no mistypes values nor inconsistencies
-
-show_plots()
+show_plots(sch_db, target='Health_Issues')
 
 # %%
 # https://www.statology.org/top-5-statistical-techniques-detect-handle-outliers-data
@@ -164,7 +302,7 @@ def detect_outliers_iqr(data, col):
     return lower_bound, upper_bound
 
 
-# Appliquer uniquement aux colonnes numériques
+# Only apply on numerical columns
 numeric_cols = sch_db.select_dtypes(include=['float64', 'int64']).columns
 outliers_info = {}
 
@@ -173,7 +311,7 @@ for col in numeric_cols:
     lb, ub = detect_outliers_iqr(sch_db, col)
     sch_db = sch_db[(sch_db[col] >= lb) & (sch_db[col] <= ub)]
 
-show_plots()
+show_plots(sch_db, target='Health_Issues')
 # Remaining values after outliers cleaning: 7671 (for n*IQR:=1.5*IQR)
 sch_db
 
@@ -188,11 +326,11 @@ y = sch_db['Health_Issues']
 # Since our database is a bit small (< 10k lines), we keep 20% of the data for testing purpose
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=TEST_SIZE, random_state=RD_STATE)
 
-
+# Get a csv of all x and y
 def all_to_csv(x_train, x_test, y_train, y_test):
     x_train.to_csv("x_train.csv")
     y_train.to_csv("y_train.csv")
-    x_train.to_csv("x_test.csv")
+    x_test.to_csv("x_test.csv")
     y_test.to_csv("y_test.csv")
 
 
@@ -202,14 +340,15 @@ def all_to_csv(x_train, x_test, y_train, y_test):
 # * Goal: Prepare raw data for modelling or analysis.
 # * Includes data cleaning, plus additional transformations, such as:
 #     * Encoding categorical variables (e.g., one-hot encoding)
-#       * Done
+#       + Done
 #     * Feature scaling (e.g., normalization, standardization)
-#       * Done - delete outliers
+#       + Done
 #     * Feature selection/extraction
-#        * Done previously
+#        + Done
 #     * Data transformation (e.g., log transformations, binning)
+#       + Not necessary
 #     * Handling imbalanced datasets
-#        * In progress
+#        + ???????????? no du coup ?
 
 
 # %% [markdown]
@@ -236,18 +375,6 @@ def transformationEncoderTestTrain(df_train: pd.DataFrame, df_test: pd.DataFrame
     
     return df_train, df_test
 
-"""for col in cols:
-    x_train = transformationEncoder(x_train, col)
-    x_test = transformationEncoder(x_test, col)
-
-def transformationEncoder(df_train: pd.DataFrame, df_test: pd.DataFrame, colName: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-    le = LabelEncoder()
-
-    df_train[colName] = le.fit_transform(df_train[colName])
-    df_test[colName] = le.transform(df_test[colName])
-
-    return df_train, df_test"""
-
 # List of columns to label encode
 cols = ["Gender", "Sleep_Quality", "Stress_Level"]  #, "Occupation", "Country"]
 
@@ -265,22 +392,14 @@ y_test_dumb = pd.get_dummies(y_test, columns=["Health_Issues"], dtype=int)
 y_test = y_test_dumb
 y_train = y_train_dumb
 
-#le = LabelEncoder()
-#y_train = le.fit_transform(y_train)
-#y_test = le.transform(y_test)
-
-#y_train, y_test = transformationEncoderTrainTest(pd.DataFrame(y_train), pd.DataFrame(y_test), "Health_Issues")
-
-
-#all_to_csv(x_train, x_test, y_train, y_test)
 y_train
 
 
-## %% [mardown]
+# %% [mardown]
 ## ### Class Balancing before encoding
 ## BAD IDEA 
 #
-##%%
+# %%
 #from collections import Counter
 #from imblearn.over_sampling import ADASYN
 #x_train, y_train = ADASYN(random_state=RD_STATE).fit_resample(x_train, y_train)
@@ -299,8 +418,6 @@ sc = StandardScaler()
 x_train = sc.fit_transform(x_train)
 x_test = sc.transform(x_test)
 
-
-# pd.DataFrame(x_train_norm).to_csv("norm.csv")
 # %% [markdown]
 # ## KNN
 # %%
@@ -322,6 +439,7 @@ print(f"Best Score: {search.best_score_}")
 
 best_knn_classifier = search.best_estimator_
 
+# Generate predictions on the unseen test set
 y_predict = best_knn_classifier.predict(x_test)
 
 y_predict
@@ -329,7 +447,7 @@ y_predict
 # ## Evaluation of the model
 # %%
 
-# Get the accuracy score
+# Get the evaluation metrics
 knn_acc = accuracy_score(y_test, y_predict)*100
 knn_pre = precision_score(y_test, y_predict, average = 'weighted')
 knn_recall = recall_score(y_test, y_predict, average = 'weighted')
