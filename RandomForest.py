@@ -41,6 +41,8 @@ from sklearn.preprocessing import LabelBinarizer
 import warnings
 import math
 
+plt.show = lambda *args, **kargs: None
+
 
 warnings.filterwarnings("ignore")
 
@@ -516,9 +518,12 @@ else:
 
 
 #%%
+y_train = pd.DataFrame(y_train)
+y_train.value_counts()
+
 best_rf_classifier.fit(x_train, y_train)
 y_predict = best_rf_classifier.predict(x_test)
-print(y_predict)
+
 
 
 # %% [markdown]
