@@ -332,7 +332,7 @@ y = sch_db['Health_Issues']
 print(x.columns)
 
 # Since our database is small (< 10k lines), we keep 20% of the data for testing purpose
-x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.20, random_state=RD_STATE)
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=RD_STATE)
 
 print("\n################")
 print(y_test.value_counts())

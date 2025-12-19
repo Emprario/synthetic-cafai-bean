@@ -293,7 +293,7 @@ def eval_df(df):
         print(df[col].describe())
         print("\n")
 
-#eval_df(sch_db)
+eval_df(sch_db)
 # high Physical_Activity_Hours !
 
 # It seems there are no mistypes values nor inconsistencies
