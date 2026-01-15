@@ -58,7 +58,7 @@ Pierre Cameleri le giga goat et Evan Ladeira, l'autre
 
 
 
-## **Second Model : *Random Forest*
+## **Second Model : Random Forest**
 
 
 ### Target variable
