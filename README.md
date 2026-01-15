@@ -30,7 +30,7 @@ You just need to press `run` lmaooo
 - [x] Data split
 - [x] Data preprocessing
 - [x] Selection of the ML algorithm
-- [ ] Evaluation of the ML
+- [x] Evaluation of the ML
 
 ## Contribution
 Pierre Cameleri le giga goat et Evan Ladeira, l'autre
@@ -58,13 +58,23 @@ Pierre Cameleri le giga goat et Evan Ladeira, l'autre
 
 
 
-## **Second Model : *to determine***  
+## **Second Model : *Random Forest*
+
 
 ### Target variable
+* Health issues
 
-* To determine
-
-### Input variables
-
-* To determine
-
+### Input variables 
+* Age
+* Gender
+* Country
+* Coffee_intake
+* Caffeine_mg
+* Sleep_hours
+* BMI (body mass index)
+* Hearth_rate
+* Stress_level
+* Physical_Activity_Hours
+* Occupation
+* Smoking
+* Alcohol_Consumption
